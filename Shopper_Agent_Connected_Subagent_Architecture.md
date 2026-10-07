@@ -24,19 +24,6 @@ it is a network of agents:
   templates, agent user, and variable store. Service teams can own and release them independently of
   the commerce team.
 
-| Layer | Component | Type | Responsibility |
-|---|---|---|---|
-| Entry | `agent_router` (start_agent) | Router (`sfdc_ai__DefaultEinsteinHyperClassifier`) | Runs on every shopper turn and picks the destination |
-| **Commerce** | **`product_expert`** | **Commerce node `node://commerce/shopper_agent/v1`** (BYON LLM) | Product discovery, recommendations, comparisons, and product Q&A (features, specs, price, availability, variants, product‑specific sizing) |
-| Commerce helper | `off_topic` | Internal subagent + Apex catalog‑alias lookup | Checks unfamiliar or misspelled words against the catalog, then hands off to `product_expert` |
-| Clarification | `ambiguous_question` | Internal | Multi‑topic or vague requests |
-| Guardrails | `ShopperDoNotAnswer`, `Reverse_Engineering`, `Prompt_Injection`, `Inappropriate_Content` | Internal | Medical, competitor, PII, checkout‑in‑chat, and safety refusals |
-| Escalation | `Escalation` → `deflection` / `phone_assist` → `information_collection` → `process_escalation` | Internal | Deflect, count requests, collect name and email, create a case, transfer |
-| Close | `EndSession` | Internal | `@utils.end_session` |
-| **Service** | **`<Order_Support_Agent>`** | **Connected agent** `agent://<Order_Support_Agent>` | Order status, tracking, return or refund status, return eligibility for a specific order |
-| **Service** | **`<Site_FAQ_Agent>`** | **Connected agent** `agent://<Site_FAQ_Agent>` | Site and service policy FAQ, size chart, loyalty program, coupon how‑to, store locator |
-| Human | `connection messaging` | Omni‑Channel Flow `flow://<Service_Router_Flow>` | Live‑agent transfer |
-
 ---
 
 ## 2. Architecture diagram
