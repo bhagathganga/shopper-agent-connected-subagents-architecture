@@ -299,7 +299,7 @@ then writes them to `OrderNumber` and `CustomerEmail`. Any value the shopper has
 blank, and the connected agent asks only for what is missing. **A shopper who has already typed their
 order number does not have to repeat it.**
 
-`<Site_FAQ_Agent>` takes an optional `Locale` input (see Section 8, item 1).
+`<Site_FAQ_Agent>` takes an optional `Locale` input. Map it from the main agent's detected language, because linked session variables are null inside a connected agent.
 
 ### 5.2 Channel 2: the shared MessagingSession record (connected → main, and into escalation)
 
@@ -485,20 +485,3 @@ Hand‑off rules that make these paths reliable:
 * The scope rule in its system instructions says product discovery, product detail, and order lookup
   belong to the parent shopper agent. The main router takes those turns.
 * Citations are enabled. Links are passed through and must be preserved by the main agent.
-
----
-
-## 8. Implementation checklist and recommendations
-
-| # | Item | Why |
-|---|---|---|
-| 1 | Map **every** External input a connected agent expects, including `Locale` or language (for example `Locale: string = @variables.DetectedLanguage`). Branch on that input inside the connected agent instead of on linked session variables. | Linked variables are null inside connected agents. Without the mapping, locale‑specific content such as a localized FAQ page silently falls back to the default. |
-| 2 | Always pass the session ID as an input (`routableId`). Do not rely on the connected agent's own linked `RoutableId`. | It is the only way the connected agent can write back to the session. |
-| 3 | Use **MessagingSession fields plus a read flow in the main router** as the back‑channel from connected agents (for example `Can_Escalate__c`). | Connected agents have no output mapping. |
-| 4 | Keep **human transfer only in the main agent**. Connected agents should *offer* it and set a flag. | This gives one escalation path, one case‑creation flow, and consistent queue routing. |
-| 5 | Add a top‑priority **verbatim passthrough rule** for structured payloads returned by connected agents. | Paraphrasing silently breaks rich cards. |
-| 6 | Run the "capture before hand‑off" step for lookup keys in the router. | The shopper never has to repeat details they have already given. |
-| 7 | Consider passing light **product context** (for example `CurrentProductName`) to the FAQ agent, or have the router replace pronouns with the product name before hand‑off. | Product‑specific FAQs ("how do I clean these?") otherwise lose their subject. |
-| 8 | Make the policy‑vs‑product and process‑vs‑specific‑order boundaries explicit in the router **and** in each subagent's description. | These two boundaries account for most misroutes. |
-| 9 | Keep each guidance string at or under 255 characters. | Publish rejects longer strings, and validate does not catch it. |
-| 10 | Only offer suggestion chips the agent can fulfil, and test every chip end‑to‑end. | A chip that errors, resets the chat, or loops to the greeting breaks the shopper's trust. |

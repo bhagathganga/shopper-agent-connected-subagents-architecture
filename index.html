@@ -71,7 +71,6 @@ figure.diagram figcaption{font-size:12px;color:#8a93a3;text-align:right;margin-t
 <li><a href="#site-faq-agentsite_faq_agent">Site FAQ (agent://&lt;Site_FAQ_Agent&gt;)</a></li>
 </ul>
 </li>
-<li><a href="#8-implementation-checklist-and-recommendations">8. Implementation checklist and recommendations</a></li>
 </ul>
 </div>
 </nav>
@@ -476,7 +475,7 @@ conversation for an order number (using the retailer's order‑number pattern) a
 then writes them to <code>OrderNumber</code> and <code>CustomerEmail</code>. Any value the shopper has not given is passed
 blank, and the connected agent asks only for what is missing. <strong>A shopper who has already typed their
 order number does not have to repeat it.</strong></p>
-<p><code>&lt;Site_FAQ_Agent&gt;</code> takes an optional <code>Locale</code> input (see Section 8, item 1).</p>
+<p><code>&lt;Site_FAQ_Agent&gt;</code> takes an optional <code>Locale</code> input. Map it from the main agent's detected language, because linked session variables are null inside a connected agent.</p>
 <h3 id="52-channel-2-the-shared-messagingsession-record-connected-main-and-into-escalation">5.2 Channel 2: the shared MessagingSession record (connected → main, and into escalation)</h3>
 <p>Connected agents have <strong>no output mapping</strong> back to main‑agent variables. Instead, the connected
 agent writes to the <strong>MessagingSession record</strong>, using the <code>routableId</code> it was given, and the main
@@ -718,70 +717,7 @@ a return.</li>
 <li>The scope rule in its system instructions says product discovery, product detail, and order lookup
   belong to the parent shopper agent. The main router takes those turns.</li>
 <li>Citations are enabled. Links are passed through and must be preserved by the main agent.</li>
-</ul>
-<hr />
-<h2 id="8-implementation-checklist-and-recommendations">8. Implementation checklist and recommendations</h2>
-<table>
-<thead>
-<tr>
-<th>#</th>
-<th>Item</th>
-<th>Why</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td>1</td>
-<td>Map <strong>every</strong> External input a connected agent expects, including <code>Locale</code> or language (for example <code>Locale: string = @variables.DetectedLanguage</code>). Branch on that input inside the connected agent instead of on linked session variables.</td>
-<td>Linked variables are null inside connected agents. Without the mapping, locale‑specific content such as a localized FAQ page silently falls back to the default.</td>
-</tr>
-<tr>
-<td>2</td>
-<td>Always pass the session ID as an input (<code>routableId</code>). Do not rely on the connected agent's own linked <code>RoutableId</code>.</td>
-<td>It is the only way the connected agent can write back to the session.</td>
-</tr>
-<tr>
-<td>3</td>
-<td>Use <strong>MessagingSession fields plus a read flow in the main router</strong> as the back‑channel from connected agents (for example <code>Can_Escalate__c</code>).</td>
-<td>Connected agents have no output mapping.</td>
-</tr>
-<tr>
-<td>4</td>
-<td>Keep <strong>human transfer only in the main agent</strong>. Connected agents should <em>offer</em> it and set a flag.</td>
-<td>This gives one escalation path, one case‑creation flow, and consistent queue routing.</td>
-</tr>
-<tr>
-<td>5</td>
-<td>Add a top‑priority <strong>verbatim passthrough rule</strong> for structured payloads returned by connected agents.</td>
-<td>Paraphrasing silently breaks rich cards.</td>
-</tr>
-<tr>
-<td>6</td>
-<td>Run the "capture before hand‑off" step for lookup keys in the router.</td>
-<td>The shopper never has to repeat details they have already given.</td>
-</tr>
-<tr>
-<td>7</td>
-<td>Consider passing light <strong>product context</strong> (for example <code>CurrentProductName</code>) to the FAQ agent, or have the router replace pronouns with the product name before hand‑off.</td>
-<td>Product‑specific FAQs ("how do I clean these?") otherwise lose their subject.</td>
-</tr>
-<tr>
-<td>8</td>
-<td>Make the policy‑vs‑product and process‑vs‑specific‑order boundaries explicit in the router <strong>and</strong> in each subagent's description.</td>
-<td>These two boundaries account for most misroutes.</td>
-</tr>
-<tr>
-<td>9</td>
-<td>Keep each guidance string at or under 255 characters.</td>
-<td>Publish rejects longer strings, and validate does not catch it.</td>
-</tr>
-<tr>
-<td>10</td>
-<td>Only offer suggestion chips the agent can fulfil, and test every chip end‑to‑end.</td>
-<td>A chip that errors, resets the chat, or loops to the greeting breaks the shopper's trust.</td>
-</tr>
-</tbody>
-</table></main>
+</ul></main>
 </div>
 <div id="zoom"><div class="inner"></div></div>
 <script type="module">
