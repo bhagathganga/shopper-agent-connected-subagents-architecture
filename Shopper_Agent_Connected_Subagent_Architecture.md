@@ -70,8 +70,8 @@ flowchart LR
         FR{{faq_router}} --> FQ["GeneralFAQ · SizingFAQ · LoyaltyProgram ·<br/>CouponHelp · StoreLocator · ShopperDoNotAnswer<br/>(prompt templates + knowledge)"]
     end
 
-    R == "inputs: routableId, OrderNumber,<br/>CustomerEmail, siteIdentifier" ==> SR
-    R == "go_to_Site_FAQ" ==> FR
+    R == "last 10 messages + current message<br/>inputs: routableId, OrderNumber,<br/>CustomerEmail, siteIdentifier" ==> SR
+    R == "last 10 messages + current message<br/>inputs: Locale" ==> FR
 
     MS[("MessagingSession record<br/>site · locale · currency · basket ·<br/>shopper id · tokens · language ·<br/>Can_Escalate__c · order no.")]
     MS -. linked variables .-> R
@@ -270,9 +270,44 @@ named after a city, are easy to misroute. The pattern sends them to `off_topic` 
 A connected agent runs in **its own variable store**. It does **not** inherit the main agent's
 variables. Its `linked` variables bound to `@MessagingSession.*` also resolve to **null** when it
 runs as a connected agent, because the session binding is not inherited. Context therefore moves
-through the four channels described below.
+through the five channels described below.
 
-### 5.1 Channel 1: explicit input mapping (main → connected)
+### 5.1 Channel 1: conversation history (main → connected)
+
+Every time the main agent hands a turn to a connected agent, the runtime sends the connected agent
+**one message** that bundles recent conversation history with the shopper's current message:
+
+```text
+[CONVERSATION HISTORY]
+<last 10 messages>
+
+[MESSAGE]
+<user's last message>
+```
+
+* **`[CONVERSATION HISTORY]`** holds the **last 10 messages** of the conversation, from both the
+  shopper and the assistant. It includes turns handled by the main agent, such as earlier product
+  discovery, and by any other connected agent. The connected agent can therefore resolve short
+  follow‑ups ("yes", "that one", "what about the other order?") and refer to anything mentioned in
+  that window.
+* **`[MESSAGE]`** holds the shopper's current message, which is the turn the connected agent must
+  answer.
+
+What this means for design:
+
+* **History is unstructured text, and the window is limited.** Anything said more than 10 messages
+  ago is not visible. Product IDs, carousel data, the basket, and tokens are never included, because
+  only message text is sent.
+* **Use history for conversational context. Use inputs (Channel 2) for anything an action needs.**
+  If a connected agent's action must receive a value such as an order number, a session ID, a site,
+  or a locale, pass it as an explicit input instead of relying on the model to find it in history.
+  Explicit inputs are deterministic, survive beyond the 10‑message window, and do not depend on the
+  model's extraction.
+* **Write connected‑agent instructions with the envelope in mind.** For example: "Answer the
+  `[MESSAGE]`. Use `[CONVERSATION HISTORY]` only to resolve references. Never answer an older
+  question from the history."
+
+### 5.2 Channel 2: explicit input mapping (main → connected)
 
 The main agent declares `inputs:` on each `connected_subagent`. At hand‑off, these inputs fill the
 connected agent's variables marked `visibility: "External"`.
@@ -289,9 +324,113 @@ connected_subagent <Order_Support_Agent>:
 
 | Input | Purpose in the connected agent |
 |---|---|
-| `routableId` | The live MessagingSession ID. This is the connected agent's **only reliable handle on the session**. It is used by order lookup and by the session write‑backs in Channel 2. |
+| `routableId` | The live MessagingSession ID. This is the connected agent's **only reliable handle on the session**. It is used by order lookup and by the session write‑backs in Channel 3. |
 | `OrderNumber`, `CustomerEmail` | Pre‑filled lookup keys |
 | `siteIdentifier` | Site‑specific help and regional content |
+
+#### How to pass an additional variable to a connected agent
+
+1. **In the connected agent**, declare the variable as `mutable` with `visibility: "External"`.
+   Do not declare it as `linked`, because linked session bindings resolve to null in a connected
+   agent:
+
+   ```text
+   variables:
+       Locale: mutable string = "en_US"
+           description: "Customer locale passed in from the parent agent."
+           visibility: "External"
+   ```
+
+2. **In the main agent**, map a value to it in the `inputs:` block of the `connected_subagent`. The
+   value can be a main‑agent variable (linked or mutable) or a literal:
+
+   ```text
+   connected_subagent <Site_FAQ_Agent>:
+       target: "agent://<Site_FAQ_Agent>"
+       inputs:
+           Locale: string = @variables.DetectedLanguage
+   ```
+
+3. **In the connected agent**, use the variable deterministically. Bind it to action inputs
+   (`with locale = @variables.Locale`) or branch on it in instructions
+   (`if @variables.Locale == "es": ...`).
+
+Inputs are filled each time the main agent hands off. If the main agent needs a value to be current,
+for example an order number captured from the latest message, set it **before** the transition.
+The "capture before hand‑off" step below does exactly this.
+
+#### Passing variables to an external (A2A) connected agent: the variables extension
+
+The same `inputs:` mechanism works when the connected agent is an external agent reached over the
+**Agent‑to‑Agent (A2A)** protocol rather than an Agentforce agent in the same org. Values travel
+through the **variables A2A extension**:
+
+1. **Registration: the target agent advertises what it needs.** The external agent's AgentCard
+   lists the variables it expects, giving names and data types but never values, under the
+   variables extension:
+
+   ```json
+   "capabilities": {
+     "extensions": [{
+       "uri": "<variables-extension-uri>",
+       "description": "Variables this agent expects from the caller.",
+       "params": {
+         "required_variables": [
+           { "name": "tenant",     "data_type": "string" },
+           { "name": "session_id", "data_type": "string" }
+         ]
+       }
+     }]
+   }
+   ```
+
+2. **Design time: the main agent maps values to those variables.** When the external agent is added
+   as a `connected_subagent`, its `inputs:` block is pre‑populated with the advertised variable names
+   and empty placeholders. The agent builder then fills in where each value comes from, such as a
+   session‑linked variable or a configured constant:
+
+   ```text
+   variables:
+       session_id: linked string
+           description: "The session ID, linked to the current session"
+           source: @MessagingSession.Id
+       Partner_Tenant: mutable string = "<TENANT_CODE>"
+           description: "Tenant identifier for routing or configuration"
+
+   connected_subagent <External_Agent>:
+       target: "agent://<External_Agent>"
+       inputs:
+           tenant:     string = @variables.Partner_Tenant
+           session_id: string = @variables.session_id
+   ```
+
+3. **Runtime: values are sent as message metadata.** On every hand‑off, the runtime sends the
+   mapped values with the A2A message. They go in the `metadata` field, keyed by the extension URI,
+   with the value being a JSON string that lists name/value pairs. The shopper's text travels in
+   `parts` as usual:
+
+   ```json
+   {
+     "jsonrpc": "2.0",
+     "id": "req-123",
+     "method": "message/send",
+     "params": {
+       "message": {
+         "messageId": "msg-456",
+         "role": "user",
+         "parts": [{ "kind": "text", "text": "What's the status of my order?" }],
+         "metadata": {
+           "<variables-extension-uri>": "{\"variables\":[{\"name\":\"tenant\",\"value\":\"<TENANT_CODE>\"},{\"name\":\"session_id\",\"value\":\"<SESSION_ID>\"}]}"
+         }
+       },
+       "configuration": { "blocking": true }
+     }
+   }
+   ```
+
+Agentforce agents that receive A2A calls from outside use the same variables format. The pattern is
+therefore the same in both directions: the receiver declares variable names and types, and the
+caller maps values in `inputs:`, which are then delivered with each message.
 
 Before the main router hands off, it runs a **"capture before hand‑off"** step. It scans the
 conversation for an order number (using the retailer's order‑number pattern) and an email address,
@@ -301,7 +440,7 @@ order number does not have to repeat it.**
 
 `<Site_FAQ_Agent>` takes an optional `Locale` input. Map it from the main agent's detected language, because linked session variables are null inside a connected agent.
 
-### 5.2 Channel 2: the shared MessagingSession record (connected → main, and into escalation)
+### 5.3 Channel 3: the shared MessagingSession record (connected → main, and into escalation)
 
 Connected agents have **no output mapping** back to main‑agent variables. Instead, the connected
 agent writes to the **MessagingSession record**, using the `routableId` it was given, and the main
@@ -318,7 +457,7 @@ CSRF token, domain, cart‑support flag, query facets, and `EndUserLanguage`. Th
 these fields through pre‑chat or routing attributes, and they **stay in the main agent** for the whole
 session.
 
-### 5.3 Channel 3: the response path (connected → main → shopper)
+### 5.4 Channel 4: the response path (connected → main → shopper)
 
 The connected agent's reply returns to the main agent, which shows it to the shopper. The main
 agent's system instructions contain a **top‑priority passthrough rule**: when a connected agent
@@ -328,24 +467,25 @@ renders it as a rich card. FAQ citations must also be kept as links. Because the
 main agent's conversation history, the main router knows what the connected agent just said. The
 bridge rules in Section 6.3 depend on this.
 
-### 5.4 Channel 4: language and connected‑agent state
+### 5.5 Channel 5: language and connected‑agent state
 
 * **Language.** All three agents detect the language from the shopper's message, with
   `EndUserLanguage` as a fallback. Inside connected agents that fallback is a linked variable and
-  resolves to null, so the language is detected from the text. At escalation, the main agent writes
+  resolves to null, so the language is detected from the current message and the conversation history (Channel 1), or from a `Locale` input when one is mapped. At escalation, the main agent writes
   the detected language to `MessagingSession.EndUserLanguage` for queue routing.
 * **State inside a connected agent** stays inside that agent and is not visible to the main agent.
   In this pattern that state includes the last validated order and email, a distinct‑failure
   counter, and the last lookup result. The only exception is what is written to the session record
-  (Channel 2).
+  (Channel 3).
 
-### 5.5 What is *not* shared
+### 5.6 What is *not* shared
 
 | Not shared | Consequence |
 |---|---|
-| Commerce context (products shown, product IDs, basket, shopper tokens) is not passed to connected agents | Connected agents cannot search, see the cart, or resolve "these shoes". A product‑specific FAQ ("how do I clean these?") relies on the product name being in the message. |
+| Commerce context (product IDs, carousel data, basket, shopper tokens) is not passed to connected agents | Connected agents cannot search or see the cart. A reference such as "how do I clean these?" can be resolved only if the product name appears as text within the last 10 messages (Channel 1). Pass a product name as an input if it must be reliable. |
 | Main‑agent escalation state | Connected agents never perform the transfer. Order Support only *offers* it, and the main agent owns the hand‑off. |
-| Connected‑agent variables → main‑agent variables | There is no output mapping. Only session‑record fields flow back. |
+| Connected‑agent variables → main‑agent variables | There is no output mapping. Only session‑record fields (Channel 3) and the reply text (Channel 4) flow back. |
+| Conversation older than the last 10 messages | It is not visible to the connected agent. Pass anything that must persist as an input. |
 
 ---
 
@@ -359,10 +499,13 @@ bridge rules in Section 6.3 depend on this.
    tokens are MessagingSession‑linked variables in the main agent. Nothing is lost while a connected
    agent handles a turn, so `product_expert` continues with the same shopper session and basket.
 3. **Service inputs are captured before hand‑off.** The order number and email are pulled out of the
-   conversation and passed in (Channel 1), so a shopper can raise an order question in the middle of
+   conversation and passed in (Channel 2), so a shopper can raise an order question in the middle of
    shopping without starting over.
-4. **One voice.** All agents share the persona and the language rules. Rich cards and links pass
-   through untouched (Channel 3), so the shopper does not notice which agent answered.
+4. **Recent history travels with the hand‑off.** The connected agent receives the last 10 messages
+   (Channel 1), so it can follow up on what the shopper just said in the commerce part of the
+   conversation without asking again.
+5. **One voice.** All agents share the persona and the language rules. Rich cards and links pass
+   through untouched (Channel 4), so the shopper does not notice which agent answered.
 
 ### 6.2 Service → commerce
 
