@@ -1,0 +1,804 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Agentforce Shopper Agent with Connected Service Agents — Reference Architecture</title>
+<style>
+:root{--fg:#1d2433;--muted:#5b6475;--bg:#fff;--panel:#f6f8fb;--line:#e2e7ef;--accent:#0b5cab;--code:#f1f4f9}
+@media (prefers-color-scheme:dark){:root{--fg:#e6e9ef;--muted:#a3abba;--bg:#14171d;--panel:#1b1f27;--line:#2c323d;--accent:#6cb2ff;--code:#222835}}
+*{box-sizing:border-box}
+body{margin:0;font:15px/1.6 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;color:var(--fg);background:var(--bg)}
+.layout{display:grid;grid-template-columns:280px minmax(0,1fr);max-width:1400px;margin:0 auto}
+nav{position:sticky;top:0;height:100vh;overflow:auto;padding:24px 16px;border-right:1px solid var(--line);background:var(--panel);font-size:13.5px}
+nav .toc ul{list-style:none;padding-left:12px;margin:4px 0} nav .toc>ul{padding-left:0}
+nav a{color:var(--muted);text-decoration:none} nav a:hover{color:var(--accent)}
+nav .toc>ul>li>a{color:var(--fg);font-weight:600}
+main{padding:32px 48px 80px;min-width:0}
+h1{font-size:28px;line-height:1.25;margin:0 0 16px} h2{margin-top:48px;padding-top:12px;border-top:1px solid var(--line)} h3{margin-top:28px}
+hr{display:none}
+a{color:var(--accent)}
+blockquote{margin:16px 0;padding:10px 16px;background:var(--panel);border-left:4px solid var(--accent);border-radius:4px} blockquote p{margin:6px 0}
+table{border-collapse:collapse;width:100%;margin:16px 0;font-size:14px;display:block;overflow-x:auto}
+th,td{border:1px solid var(--line);padding:8px 10px;vertical-align:top;text-align:left} th{background:var(--panel)}
+td ul{margin:0;padding-left:18px}
+code{background:var(--code);padding:1px 5px;border-radius:4px;font:13px/1.5 ui-monospace,SFMono-Regular,Menlo,monospace}
+pre{background:var(--code);padding:14px;border-radius:6px;overflow:auto} pre code{padding:0;background:none}
+figure.diagram{background:#fff;border:1px solid var(--line);border-radius:8px;padding:16px;margin:16px 0;cursor:zoom-in;overflow-x:auto}
+figure.diagram pre.mermaid{background:#fff;margin:0;padding:0;text-align:center}
+figure.diagram figcaption{font-size:12px;color:#8a93a3;text-align:right;margin-top:4px}
+#zoom{position:fixed;inset:0;background:rgba(10,14,22,.85);display:none;z-index:10;overflow:auto;cursor:zoom-out}
+#zoom .inner{background:#fff;margin:24px auto;padding:24px;border-radius:8px;width:max-content;max-width:none}
+#zoom svg{max-width:none!important;height:auto}
+@media (max-width:900px){.layout{grid-template-columns:1fr} nav{position:static;height:auto;border-right:0;border-bottom:1px solid var(--line)} main{padding:24px 18px}}
+@media print{nav,#zoom,figcaption{display:none} .layout{display:block}}
+</style>
+</head>
+<body>
+<div class="layout">
+<nav><strong>Contents</strong><div class="toc">
+<ul>
+<li><a href="#1-overview">1. Overview</a></li>
+<li><a href="#2-architecture-diagram">2. Architecture diagram</a></li>
+<li><a href="#3-how-routing-works">3. How routing works</a></li>
+<li><a href="#4-product-expert-subagent-commerce">4. Product Expert subagent (commerce)</a><ul>
+<li><a href="#41-how-it-is-built">4.1 How it is built</a></li>
+<li><a href="#42-react-loop">4.2 ReAct loop</a></li>
+<li><a href="#43-tools-actions">4.3 Tools (actions)</a></li>
+<li><a href="#44-the-four-guidance-layers">4.4 The four guidance layers</a></li>
+<li><a href="#45-ui-components">4.5 UI components</a></li>
+<li><a href="#46-getting-a-turn-to-product-expert-catalog-handoff">4.6 Getting a turn to Product Expert: catalog hand‑off</a></li>
+<li><a href="#47-model-and-runtime-settings">4.7 Model and runtime settings</a></li>
+</ul>
+</li>
+<li><a href="#5-how-context-is-shared-between-the-main-agent-and-the-connected-agents">5. How context is shared between the main agent and the connected agents</a><ul>
+<li><a href="#51-channel-1-explicit-input-mapping-main-connected">5.1 Channel 1: explicit input mapping (main → connected)</a></li>
+<li><a href="#52-channel-2-the-shared-messagingsession-record-connected-main-and-into-escalation">5.2 Channel 2: the shared MessagingSession record (connected → main, and into escalation)</a></li>
+<li><a href="#53-channel-3-the-response-path-connected-main-shopper">5.3 Channel 3: the response path (connected → main → shopper)</a></li>
+<li><a href="#54-channel-4-language-and-connectedagent-state">5.4 Channel 4: language and connected‑agent state</a></li>
+<li><a href="#55-what-is-not-shared">5.5 What is not shared</a></li>
+</ul>
+</li>
+<li><a href="#6-seamless-movement-between-service-and-commerce">6. Seamless movement between service and commerce</a><ul>
+<li><a href="#61-why-switching-works">6.1 Why switching works</a></li>
+<li><a href="#62-service-commerce">6.2 Service → commerce</a></li>
+<li><a href="#63-commerce-service">6.3 Commerce → service</a></li>
+<li><a href="#64-service-or-commerce-human">6.4 Service or commerce → human</a></li>
+</ul>
+</li>
+<li><a href="#7-connected-agent-internals-summary">7. Connected agent internals (summary)</a><ul>
+<li><a href="#order-support-agentorder_support_agent">Order Support (agent://&lt;Order_Support_Agent&gt;)</a></li>
+<li><a href="#site-faq-agentsite_faq_agent">Site FAQ (agent://&lt;Site_FAQ_Agent&gt;)</a></li>
+</ul>
+</li>
+<li><a href="#8-implementation-checklist-and-recommendations">8. Implementation checklist and recommendations</a></li>
+</ul>
+</div>
+</nav>
+<main><h1 id="agentforce-shopper-agent-with-connected-service-agents-reference-architecture">Agentforce Shopper Agent with Connected Service Agents — Reference Architecture</h1>
+<blockquote>
+<p><strong>Purpose:</strong> This is a reusable pattern for a B2C Commerce shopper agent that combines product
+discovery, run by a commerce subagent in the main agent, with order support and site FAQ, run by
+separately deployed <strong>connected agents</strong>. It also covers live‑agent escalation, how context is
+shared across agent boundaries, and how a shopper moves seamlessly between service and commerce.</p>
+<p>The pattern is taken from a production‑style retail deployment and has been anonymised. Names in
+<code>&lt;ANGLE_BRACKETS&gt;</code> are placeholders. Standard Salesforce action and node names are real.</p>
+</blockquote>
+<hr />
+<h2 id="1-overview">1. Overview</h2>
+<p>From the shopper's point of view, there is one assistant with one persona and one voice. Underneath,
+it is a network of agents:</p>
+<ul>
+<li><strong>Main agent (Shopping Assistant).</strong> It owns the conversation, the per‑turn router, all
+  commerce, the guardrails, and the hand‑off to a human.</li>
+<li><strong>Internal subagents.</strong> These are topics defined inside the main agent's script and run in the
+  main agent's context.</li>
+<li><strong>Connected subagents.</strong> These are separate, independently deployed Agentforce agents that the
+  main agent calls through <code>@connected_subagent</code>. Each has its own script, router, actions, prompt
+  templates, agent user, and variable store. Service teams can own and release them independently of
+  the commerce team.</li>
+</ul>
+<table>
+<thead>
+<tr>
+<th>Layer</th>
+<th>Component</th>
+<th>Type</th>
+<th>Responsibility</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Entry</td>
+<td><code>agent_router</code> (start_agent)</td>
+<td>Router (<code>sfdc_ai__DefaultEinsteinHyperClassifier</code>)</td>
+<td>Runs on every shopper turn and picks the destination</td>
+</tr>
+<tr>
+<td><strong>Commerce</strong></td>
+<td><strong><code>product_expert</code></strong></td>
+<td><strong>Commerce node <code>node://commerce/shopper_agent/v1</code></strong> (BYON LLM)</td>
+<td>Product discovery, recommendations, comparisons, and product Q&amp;A (features, specs, price, availability, variants, product‑specific sizing)</td>
+</tr>
+<tr>
+<td>Commerce helper</td>
+<td><code>off_topic</code></td>
+<td>Internal subagent + Apex catalog‑alias lookup</td>
+<td>Checks unfamiliar or misspelled words against the catalog, then hands off to <code>product_expert</code></td>
+</tr>
+<tr>
+<td>Clarification</td>
+<td><code>ambiguous_question</code></td>
+<td>Internal</td>
+<td>Multi‑topic or vague requests</td>
+</tr>
+<tr>
+<td>Guardrails</td>
+<td><code>ShopperDoNotAnswer</code>, <code>Reverse_Engineering</code>, <code>Prompt_Injection</code>, <code>Inappropriate_Content</code></td>
+<td>Internal</td>
+<td>Medical, competitor, PII, checkout‑in‑chat, and safety refusals</td>
+</tr>
+<tr>
+<td>Escalation</td>
+<td><code>Escalation</code> → <code>deflection</code> / <code>phone_assist</code> → <code>information_collection</code> → <code>process_escalation</code></td>
+<td>Internal</td>
+<td>Deflect, count requests, collect name and email, create a case, transfer</td>
+</tr>
+<tr>
+<td>Close</td>
+<td><code>EndSession</code></td>
+<td>Internal</td>
+<td><code>@utils.end_session</code></td>
+</tr>
+<tr>
+<td><strong>Service</strong></td>
+<td><strong><code>&lt;Order_Support_Agent&gt;</code></strong></td>
+<td><strong>Connected agent</strong> <code>agent://&lt;Order_Support_Agent&gt;</code></td>
+<td>Order status, tracking, return or refund status, return eligibility for a specific order</td>
+</tr>
+<tr>
+<td><strong>Service</strong></td>
+<td><strong><code>&lt;Site_FAQ_Agent&gt;</code></strong></td>
+<td><strong>Connected agent</strong> <code>agent://&lt;Site_FAQ_Agent&gt;</code></td>
+<td>Site and service policy FAQ, size chart, loyalty program, coupon how‑to, store locator</td>
+</tr>
+<tr>
+<td>Human</td>
+<td><code>connection messaging</code></td>
+<td>Omni‑Channel Flow <code>flow://&lt;Service_Router_Flow&gt;</code></td>
+<td>Live‑agent transfer</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="2-architecture-diagram">2. Architecture diagram</h2>
+<figure class="diagram" title="Click to zoom"><pre class="mermaid">flowchart LR
+    C([Shopper&lt;br/&gt;storefront chat]) --&gt; R
+
+    subgraph MAIN[&quot;Shopping Assistant — main agent&quot;]
+        direction TB
+        R{{&quot;agent_router&lt;br/&gt;runs every turn&lt;br/&gt;reads Can_Escalate__c&quot;}}
+        PE[&quot;&lt;b&gt;product_expert&lt;/b&gt;&lt;br/&gt;commerce shopper_agent node&lt;br/&gt;token · search · details&quot;]
+        OT[&quot;off_topic&lt;br/&gt;catalog alias lookup&quot;]
+        G[&quot;Guardrails &amp; clarification&lt;br/&gt;ShopperDoNotAnswer · ambiguous_question ·&lt;br/&gt;Reverse_Engineering · Prompt_Injection · Inappropriate_Content&quot;]
+        E[&quot;Human escalation&lt;br/&gt;Escalation → deflection → information_collection →&lt;br/&gt;process_escalation (case + transfer)&quot;]
+        R --&gt; PE
+        R --&gt; OT
+        OT -. &quot;catalog hit → next turn&quot; .-&gt; PE
+        R --&gt; G
+        R --&gt; E
+    end
+
+    subgraph SUP[&quot;Connected agent — Order Support&quot;]
+        direction TB
+        SR{{agent_router}} --&gt; OM[&quot;Order_Management&lt;br/&gt;resolve order · order‑number help ·&lt;br/&gt;order FAQ · record order no. · set can‑escalate&quot;]
+        OM --&gt;|&quot;Nth distinct failure&quot;| EO[escalation_offer]
+    end
+
+    subgraph FAQ[&quot;Connected agent — Site FAQ&quot;]
+        direction TB
+        FR{{faq_router}} --&gt; FQ[&quot;GeneralFAQ · SizingFAQ · LoyaltyProgram ·&lt;br/&gt;CouponHelp · StoreLocator · ShopperDoNotAnswer&lt;br/&gt;(prompt templates + knowledge)&quot;]
+    end
+
+    R == &quot;inputs: routableId, OrderNumber,&lt;br/&gt;CustomerEmail, siteIdentifier&quot; ==&gt; SR
+    R == &quot;go_to_Site_FAQ&quot; ==&gt; FR
+
+    MS[(&quot;MessagingSession record&lt;br/&gt;site · locale · currency · basket ·&lt;br/&gt;shopper id · tokens · language ·&lt;br/&gt;Can_Escalate__c · order no.&quot;)]
+    MS -. linked variables .-&gt; R
+    OM -. &quot;writes flag + order no.&quot; .-&gt; MS
+    PE &lt;--&gt; B2C[(&quot;B2C Commerce&lt;br/&gt;SLAS / SCAPI&quot;)]
+    E --&gt; OMNI([Omni‑Channel → live agent])
+</pre><figcaption>Click to zoom</figcaption></figure>
+<hr />
+<h2 id="3-how-routing-works">3. How routing works</h2>
+<ol>
+<li><strong>Every shopper message enters <code>agent_router</code> first.</strong> This includes messages sent while the
+   conversation is "inside" a connected agent. The router reclassifies intent on each turn and uses
+   recent conversation history only to make sense of short follow‑ups such as "yes", "the first one",
+   or "check another order". This per‑turn routing is what lets a shopper switch freely between
+   service and commerce (see Section 6).</li>
+<li><strong>Deterministic pre‑checks run before the LLM classifier.</strong> They run in this order:<ul>
+<li>Seed <code>siteId</code> and <code>userLocale</code> from MessagingSession‑linked variables.</li>
+<li>Run <code>Read_Session_Context</code> (a flow that reads <code>Can_Escalate__c</code>, which the connected Order Support
+ agent may have set).</li>
+<li>If <code>CanEscalate</code> and <code>escalationRequested</code> are both true, go to <code>information_collection</code>.</li>
+<li>If escalation information collection is in progress, go to <code>information_collection</code> or
+ <code>process_escalation</code>.</li>
+<li>If a catalog typo confirmation is pending, go to <code>off_topic</code>. If a catalog hand‑off is pending,
+ go to <code>product_expert</code>.</li>
+</ul>
+</li>
+<li><strong>LLM routing rules</strong> decide between the remaining destinations:<ul>
+<li>Profanity or extreme frustration goes to escalation.</li>
+<li>A request for a human goes to <code>Escalation</code>.</li>
+<li>Medical, competitor, PII, and checkout‑in‑chat requests go to <code>ShopperDoNotAnswer</code>.</li>
+<li><strong>Questions about a specific order</strong> go to <strong>Order Support</strong>. These include status, tracking,
+ eligibility, refund or return status, a bare order number, and cancelling or changing a named order.</li>
+<li><strong>Policy and process questions</strong> go to <strong>Site FAQ</strong>. These include how to return or exchange
+ when no order number is given, shipping, warranty, care, size chart, loyalty, coupon how‑to,
+ store locator, and the general process for cancelling an order.</li>
+<li><strong>Product discovery and product attribute questions</strong> go to <code>product_expert</code>.</li>
+<li>Unfamiliar or misspelled single words go to <code>off_topic</code> for a catalog check.</li>
+<li>Questions that span several topics or are vague go to <code>ambiguous_question</code>.</li>
+</ul>
+</li>
+</ol>
+<blockquote>
+<p><strong>Design tip:</strong> The single most important routing boundary is <em>policy vs. product</em>. "What's the
+return policy on these sandals?" is FAQ, even though it names a product. "Does model X run big?" is
+product, because it is about a specific product's sizing. State this boundary explicitly in the
+router and in both subagent descriptions.</p>
+</blockquote>
+<hr />
+<h2 id="4-product-expert-subagent-commerce">4. Product Expert subagent (commerce)</h2>
+<p><code>product_expert</code> is the commerce workhorse. It handles <strong>all product discovery and product
+questions</strong>: browsing, searching, recommendations, comparisons, gift or outfit bundles, and questions
+about a specific product's features, specs, price, availability, variants, and sizing. It does
+<strong>not</strong> handle policy, care, order status, or the general size chart. The router sends those to the
+connected agents.</p>
+<h3 id="41-how-it-is-built">4.1 How it is built</h3>
+<p>It is not a hand‑written topic. It is the <strong>Salesforce commerce shopper node</strong>, configured through
+parameters:</p>
+<pre><code class="language-text">subagent product_expert:
+    schema: &quot;node://commerce/shopper_agent/v1&quot;
+    parameters:
+        template:
+            model:                 @variables.byon_model                # BYON model via LLM gateway
+            topic:                 &quot;shopper_agent_freeform_react&quot;       # node prompt template id (do not change)
+            retailer_name:         @variables.retailer_name
+            retailer_description:  @variables.retailer_description      # brand + catalog knowledge
+            retailer_voice:        @variables.retailer_voice
+            tool_calling_guidance: @variables.tool_calling_guidance     # HOW to search
+            response_guidance:     @variables.response_guidance         # HOW to answer / format
+            example_response:      @variables.example_response          # few-shot example
+            id_col:                &quot;id&quot;
+            include_processed_response: False
+            allowed_components:    [&quot;product_carousel&quot;, &quot;suggestions&quot;]
+</code></pre>
+<p>The node renders a fixed prompt from these parameters:</p>
+<ul>
+<li><strong>Identity</strong> comes from <code>retailer_name</code>, <code>retailer_description</code>, and <code>retailer_voice</code>.</li>
+<li><strong>How you work</strong> is a ReAct loop.</li>
+<li><strong>Available components</strong> are filtered by <code>allowed_components</code>.</li>
+<li><strong>Critical rules</strong> come from the node itself.</li>
+<li><strong>Retailer‑specific guidance</strong> comes from <code>response_guidance</code>.</li>
+<li><strong>Example response</strong> comes from <code>example_response</code>.</li>
+</ul>
+<h3 id="42-react-loop">4.2 ReAct loop</h3>
+<figure class="diagram" title="Click to zoom"><pre class="mermaid">sequenceDiagram
+    actor S as Shopper
+    participant N as product_expert (ReAct)
+    participant A as getB2cUserAccessToken
+    participant Q as commerceProductSearchAction
+    participant D as b2cProductDetailsAction
+    S-&gt;&gt;N: &quot;Comfy sandals for a beach trip, women&#x27;s 8&quot;
+    N-&gt;&gt;A: shopper token (session usId / refresh token)
+    A--&gt;&gt;N: accessToken, customerId
+    par parallel search round
+        N-&gt;&gt;Q: userQuery=&quot;&lt;model A&gt; sandal, &lt;model B&gt; slide, beach sandal&quot;
+    end
+    Q--&gt;&gt;N: products (ids, names, prices, images, variants)
+    N-&gt;&gt;N: sanity-check results, refine ≤2 rounds if weak
+    opt product Q&amp;A / specs
+        N-&gt;&gt;D: productIds=[...]
+        D--&gt;&gt;N: details (variants, availability, attributes)
+    end
+    N--&gt;&gt;S: 1-line why + &lt;product_carousel&gt; + one short question + &lt;suggestions&gt;
+</pre><figcaption>Click to zoom</figcaption></figure>
+<ol>
+<li>The node receives the shopper message and the conversation history.</li>
+<li>It <strong>reasons</strong>, then emits <code>&lt;tools&gt;</code> to call one or more tools. Independent searches run <strong>in
+   parallel</strong> in a single round.</li>
+<li>It reads the tool results and either loops back (refine, fetch details) or stops.</li>
+<li>It produces the final response: short Markdown prose plus UI components. The response must end
+   with <code>&lt;suggestions&gt;</code>.</li>
+</ol>
+<h3 id="43-tools-actions">4.3 Tools (actions)</h3>
+<table>
+<thead>
+<tr>
+<th>Tool</th>
+<th>Standard action</th>
+<th>Key inputs (from main‑agent variables)</th>
+<th>Used for</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>GetB2CUserAccessToken</code></td>
+<td><code>standardInvocableAction://getB2cUserAccessToken</code></td>
+<td><code>authNamedCredential</code>, <code>siteId</code>, <code>usId</code> (session), <code>refreshTokenLinked</code>, <code>sfraAuthTokenLinked</code></td>
+<td>Gets a SLAS shopper token tied to the shopper's storefront session. Its outputs <code>accessToken</code>, <code>customerId</code>, and <code>sfraAuthToken</code> are stored in main‑agent variables and reused by the other tools.</td>
+</tr>
+<tr>
+<td><code>CommerceProductSearch</code></td>
+<td><code>standardInvocableAction://commerceProductSearchAction</code></td>
+<td><code>userQuery</code> (LLM‑filled, <strong>comma‑separated multi‑query</strong>), <code>orgId</code>, <code>siteId</code>, <code>userLocale</code>, <code>storeCurrency</code>, <code>configTemplate</code>, <code>queryFacets</code>, <code>authToken</code>, <code>customProperties</code></td>
+<td>Discovery, recommendations, and <strong>comparisons</strong>. It returns product IDs, names, prices, images, and variants, which feed <code>&lt;product_carousel&gt;</code>.</td>
+</tr>
+<tr>
+<td><code>GetB2CProductDetails</code></td>
+<td><code>standardInvocableAction://b2cProductDetailsAction</code></td>
+<td><code>productIds</code> (LLM‑filled), <code>fieldMask</code>, <code>imageViewType</code>, <code>orderableOnly</code>, <code>apiVersion</code>, <code>shopperApiNamedCredential</code>, <code>expressPaymentUrl</code>, <code>useSfraApi</code>/<code>sfraNamedCredential</code>, <code>messaging_session_id</code></td>
+<td>Answers questions about a specific product: specs, materials, variants and sizes in stock, price, and availability.</td>
+</tr>
+</tbody>
+</table>
+<p>Configuration notes:</p>
+<ul>
+<li><strong><code>configTemplate</code></strong> points to a <em>Shopping Agent Config</em> custom metadata record. That record
+  selects the product‑search source and other search settings.</li>
+<li><strong><code>queryFacets</code>, <code>additionalRefinements</code>, <code>storeCurrency</code>, <code>userLocale</code>, and <code>siteId</code></strong> come from
+  the MessagingSession, which the storefront widget populates. Search therefore respects the
+  shopper's current site, locale, and currency.</li>
+<li><strong><code>fieldMask</code></strong> limits the size of the details payload, for example by excluding long descriptions
+  and extended data and capping images. This keeps the LLM context small and fast.</li>
+<li><strong><code>orderableOnly = True</code></strong> makes the agent recommend only products that can be bought.</li>
+<li><strong><code>customProperties</code></strong> (optional) adds selected <code>c_*</code> attributes, such as sale flags or ratings, to
+  search results.</li>
+</ul>
+<h3 id="44-the-four-guidance-layers">4.4 The four guidance layers</h3>
+<p>The node's behaviour is tuned almost entirely through variables. The table below shows what each one
+controls and the patterns that proved effective in this deployment.</p>
+<table>
+<thead>
+<tr>
+<th>Layer</th>
+<th>What it controls</th>
+<th>Effective patterns</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>retailer_description</code></td>
+<td>Brand and <strong>catalog knowledge</strong></td>
+<td><ul><li>A <strong>catalog search cheat sheet</strong> mapping product lines to their purpose.</li><li>A <strong>need → keyword</strong> map (occasion → model names).</li><li>A <strong>trend → keyword</strong> map (shopper slang → catalog words).</li><li>Licensed or character franchises.</li><li>A <strong>fit and sizing guide</strong> per line (runs large or small, half‑size advice).</li><li><strong>Audience by line</strong> (women's‑only, kids'‑only, unisex).</li></ul></td>
+</tr>
+<tr>
+<td><code>tool_calling_guidance</code></td>
+<td><strong>How to search</strong></td>
+<td><ul><li>Expand vague adjectives into concrete product words.</li><li>Pass <strong>several comma‑separated queries</strong> per call, ordered specific → broad.</li><li>Search the franchise or character name alone first.</li><li><strong>Sanity‑check results</strong> and treat off‑target hits as a failed search.</li><li>Reformulate and refine at most about 2 rounds, and never declare "doesn't exist" after one empty search.</li><li>Split multi‑item requests into parallel component searches.</li><li>Answer <strong>comparisons through search, not details</strong>, so the UI components stay compatible.</li></ul></td>
+</tr>
+<tr>
+<td><code>response_guidance</code></td>
+<td><strong>How to answer and format</strong></td>
+<td><ul><li>1–2 sentences of prose, with a one‑line "why" above each carousel.</li><li>Only mention products returned by a tool, and show every product named in a carousel.</li><li>Carry earlier preferences (colour, size, audience) forward across turns.</li><li><strong>Footwear gate:</strong> ask for audience and size before showing shoes, using a <strong>size‑ladder chip</strong> set per audience plus a "different size" chip.</li><li>Fit notes on lines with a fit skew.</li><li>Category cross‑sell chips, for example accessories for a compatible product.</li><li><strong>Chip hygiene:</strong> only offer chips the agent can fulfil. No cart or checkout, how‑to, colour, or "go back" chips.</li><li>An add‑to‑cart request gets a fixed deflection to the carousel or product page.</li><li>No code fences, raw JSON, or labels.</li></ul></td>
+</tr>
+<tr>
+<td><code>example_response</code></td>
+<td>Few‑shot example</td>
+<td>One worked example of a good search plan and response</td>
+</tr>
+</tbody>
+</table>
+<blockquote>
+<p><strong>Implementation constraint:</strong> Agent Script rejects any sentence or element over <strong>255
+characters</strong> in these list variables, and the same limit applies to variable descriptions. Split
+long rules into "…" and "… cont." strings. <code>sf agent validate</code> does not catch this; publish does.</p>
+</blockquote>
+<h3 id="45-ui-components">4.5 UI components</h3>
+<p><code>allowed_components = ["product_carousel", "suggestions"]</code>. In this deployment the agent
+deliberately does <strong>not</strong> render <code>&lt;product_tile&gt;</code>, <code>&lt;product_comparison&gt;</code>, or <code>&lt;cart&gt;</code>:</p>
+<ul>
+<li>Comparisons are answered with a <code>&lt;product_carousel&gt;</code> ordered best‑fit first, plus a short
+  explanation.</li>
+<li>There is no cart management in chat. The shopper adds to cart from the carousel or the product
+  page.</li>
+<li>Every response ends with <code>&lt;suggestions&gt;</code> (next‑step chips phrased in the shopper's own voice).</li>
+</ul>
+<p>To enable in‑chat cart management, add <code>cart</code> to <code>allowed_components</code>, add the cart actions, and set
+<code>isCartMgmtSupported</code> on the session. Then remove the add‑to‑cart deflection rules from
+<code>response_guidance</code>.</p>
+<h3 id="46-getting-a-turn-to-product-expert-catalog-handoff">4.6 Getting a turn to Product Expert: catalog hand‑off</h3>
+<p>Short or unfamiliar words, such as a model name, a collaboration, a misspelling, or a product line
+named after a city, are easy to misroute. The pattern sends them to <code>off_topic</code> first:</p>
+<ol>
+<li><code>off_topic</code> calls an <strong>Apex catalog‑alias lookup</strong> backed by Platform Cache, using the shopper's
+   exact message.</li>
+<li><strong>Exact hit:</strong> it sets <code>catalog_handoff_pending = true</code>. On the <em>next</em> turn, the router's
+   deterministic pre‑check moves the shopper to <code>product_expert</code>. Waiting a turn avoids an orphaned
+   tool message that the commerce node cannot replay.</li>
+<li><strong>Fuzzy (typo) hit:</strong> it asks "Did you mean …?" and sets <code>awaiting_typo_confirmation = true</code>.<ul>
+<li>If the shopper says yes, the conversation goes to <code>product_expert</code>.</li>
+<li>If the shopper says no, the agent politely redirects.</li>
+</ul>
+</li>
+<li><strong>Miss:</strong> it redirects as off‑topic.</li>
+</ol>
+<h3 id="47-model-and-runtime-settings">4.7 Model and runtime settings</h3>
+<ul>
+<li><strong>Model:</strong> BYON through the LLM gateway (<code>byon_model</code>), for example a GPT‑4.1‑class model. The
+  routers use the Einstein Hyper Classifier for fast, low‑cost classification.</li>
+<li><code>additional_parameter__disable_groundedness: True</code> and <code>disable_citation: True</code> are set on the
+  main agent. Grounding comes from tool results, and citations come from the FAQ agent.</li>
+</ul>
+<hr />
+<h2 id="5-how-context-is-shared-between-the-main-agent-and-the-connected-agents">5. How context is shared between the main agent and the connected agents</h2>
+<p>A connected agent runs in <strong>its own variable store</strong>. It does <strong>not</strong> inherit the main agent's
+variables. Its <code>linked</code> variables bound to <code>@MessagingSession.*</code> also resolve to <strong>null</strong> when it
+runs as a connected agent, because the session binding is not inherited. Context therefore moves
+through the four channels described below.</p>
+<h3 id="51-channel-1-explicit-input-mapping-main-connected">5.1 Channel 1: explicit input mapping (main → connected)</h3>
+<p>The main agent declares <code>inputs:</code> on each <code>connected_subagent</code>. At hand‑off, these inputs fill the
+connected agent's variables marked <code>visibility: "External"</code>.</p>
+<pre><code class="language-text">connected_subagent &lt;Order_Support_Agent&gt;:
+    target: &quot;agent://&lt;Order_Support_Agent&gt;&quot;
+    inputs:
+        routableId:     string = @variables.messaging_session_id   # MessagingSession.Id
+        OrderNumber:    string = @variables.OrderNumber
+        CustomerEmail:  string = @variables.CustomerEmail
+        siteIdentifier: string = @variables.siteId
+</code></pre>
+<table>
+<thead>
+<tr>
+<th>Input</th>
+<th>Purpose in the connected agent</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>routableId</code></td>
+<td>The live MessagingSession ID. This is the connected agent's <strong>only reliable handle on the session</strong>. It is used by order lookup and by the session write‑backs in Channel 2.</td>
+</tr>
+<tr>
+<td><code>OrderNumber</code>, <code>CustomerEmail</code></td>
+<td>Pre‑filled lookup keys</td>
+</tr>
+<tr>
+<td><code>siteIdentifier</code></td>
+<td>Site‑specific help and regional content</td>
+</tr>
+</tbody>
+</table>
+<p>Before the main router hands off, it runs a <strong>"capture before hand‑off"</strong> step. It scans the
+conversation for an order number (using the retailer's order‑number pattern) and an email address,
+then writes them to <code>OrderNumber</code> and <code>CustomerEmail</code>. Any value the shopper has not given is passed
+blank, and the connected agent asks only for what is missing. <strong>A shopper who has already typed their
+order number does not have to repeat it.</strong></p>
+<p><code>&lt;Site_FAQ_Agent&gt;</code> takes an optional <code>Locale</code> input (see Section 8, item 1).</p>
+<h3 id="52-channel-2-the-shared-messagingsession-record-connected-main-and-into-escalation">5.2 Channel 2: the shared MessagingSession record (connected → main, and into escalation)</h3>
+<p>Connected agents have <strong>no output mapping</strong> back to main‑agent variables. Instead, the connected
+agent writes to the <strong>MessagingSession record</strong>, using the <code>routableId</code> it was given, and the main
+agent reads that record on every turn:</p>
+<table>
+<thead>
+<tr>
+<th>Writer (connected agent)</th>
+<th>Field</th>
+<th>Reader (main agent)</th>
+<th>Effect</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>&lt;Set_Can_Escalate&gt;</code> flow (runs automatically after the Nth <strong>distinct</strong> failed order lookup)</td>
+<td><code>Can_Escalate__c = true</code></td>
+<td><code>agent_router</code> → <code>Read_Session_Context</code> flow → <code>@variables.CanEscalate</code></td>
+<td>The main agent skips deflection and moves straight to information collection and transfer once the shopper accepts the offer</td>
+</tr>
+<tr>
+<td>Record‑session‑order‑number Apex (async)</td>
+<td>Order number on the session</td>
+<td>Case creation and the human agent</td>
+<td>The order number carries over to the case or live agent</td>
+</tr>
+</tbody>
+</table>
+<p>The same record also carries the <strong>storefront context</strong> into the main agent through <code>linked</code>
+variables: site ID, locale, currency, basket ID, shopper ID (<code>usId</code>), SLAS refresh and SFRA tokens,
+CSRF token, domain, cart‑support flag, query facets, and <code>EndUserLanguage</code>. The chat widget populates
+these fields through pre‑chat or routing attributes, and they <strong>stay in the main agent</strong> for the whole
+session.</p>
+<h3 id="53-channel-3-the-response-path-connected-main-shopper">5.3 Channel 3: the response path (connected → main → shopper)</h3>
+<p>The connected agent's reply returns to the main agent, which shows it to the shopper. The main
+agent's system instructions contain a <strong>top‑priority passthrough rule</strong>: when a connected agent
+returns a structured JSON payload, identified by a known <code>className</code> such as an order‑lookup result
+or an order‑number‑help result, the main agent must emit it <strong>byte‑for‑byte</strong>. The storefront then
+renders it as a rich card. FAQ citations must also be kept as links. Because the reply lands in the
+main agent's conversation history, the main router knows what the connected agent just said. The
+bridge rules in Section 6.3 depend on this.</p>
+<h3 id="54-channel-4-language-and-connectedagent-state">5.4 Channel 4: language and connected‑agent state</h3>
+<ul>
+<li><strong>Language.</strong> All three agents detect the language from the shopper's message, with
+  <code>EndUserLanguage</code> as a fallback. Inside connected agents that fallback is a linked variable and
+  resolves to null, so the language is detected from the text. At escalation, the main agent writes
+  the detected language to <code>MessagingSession.EndUserLanguage</code> for queue routing.</li>
+<li><strong>State inside a connected agent</strong> stays inside that agent and is not visible to the main agent.
+  In this pattern that state includes the last validated order and email, a distinct‑failure
+  counter, and the last lookup result. The only exception is what is written to the session record
+  (Channel 2).</li>
+</ul>
+<h3 id="55-what-is-not-shared">5.5 What is <em>not</em> shared</h3>
+<table>
+<thead>
+<tr>
+<th>Not shared</th>
+<th>Consequence</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Commerce context (products shown, product IDs, basket, shopper tokens) is not passed to connected agents</td>
+<td>Connected agents cannot search, see the cart, or resolve "these shoes". A product‑specific FAQ ("how do I clean these?") relies on the product name being in the message.</td>
+</tr>
+<tr>
+<td>Main‑agent escalation state</td>
+<td>Connected agents never perform the transfer. Order Support only <em>offers</em> it, and the main agent owns the hand‑off.</td>
+</tr>
+<tr>
+<td>Connected‑agent variables → main‑agent variables</td>
+<td>There is no output mapping. Only session‑record fields flow back.</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="6-seamless-movement-between-service-and-commerce">6. Seamless movement between service and commerce</h2>
+<h3 id="61-why-switching-works">6.1 Why switching works</h3>
+<ol>
+<li><strong>The main agent always routes.</strong> Every turn starts at <code>agent_router</code>, so a connected agent never
+   "locks in" the conversation.</li>
+<li><strong>Commerce state lives in the main agent.</strong> Site, locale, currency, basket ID, shopper ID, and
+   tokens are MessagingSession‑linked variables in the main agent. Nothing is lost while a connected
+   agent handles a turn, so <code>product_expert</code> continues with the same shopper session and basket.</li>
+<li><strong>Service inputs are captured before hand‑off.</strong> The order number and email are pulled out of the
+   conversation and passed in (Channel 1), so a shopper can raise an order question in the middle of
+   shopping without starting over.</li>
+<li><strong>One voice.</strong> All agents share the persona and the language rules. Rich cards and links pass
+   through untouched (Channel 3), so the shopper does not notice which agent answered.</li>
+</ol>
+<h3 id="62-service-commerce">6.2 Service → commerce</h3>
+<figure class="diagram" title="Click to zoom"><pre class="mermaid">sequenceDiagram
+    actor S as Shopper
+    participant R as Main agent_router
+    participant O as Order Support (connected)
+    participant P as product_expert (main)
+    participant MS as MessagingSession
+
+    S-&gt;&gt;R: &quot;Where is my order &lt;ORDER_NO&gt;? me@example.com&quot;
+    R-&gt;&gt;R: capture OrderNumber + CustomerEmail
+    R-&gt;&gt;O: hand-off (routableId, OrderNumber, CustomerEmail, siteIdentifier)
+    O-&gt;&gt;O: resolve order (lookup)
+    O--&gt;&gt;MS: record order number (async)
+    O--&gt;&gt;R: {&quot;className&quot;:&quot;&lt;OrderLookupResult&gt;&quot;,...}
+    R--&gt;&gt;S: order card (verbatim passthrough)
+    S-&gt;&gt;R: &quot;Great — do you have &lt;MODEL&gt; in a size 9?&quot;
+    R-&gt;&gt;R: re-classify → product discovery
+    R-&gt;&gt;P: transition to product_expert
+    P-&gt;&gt;P: token · search (same site, locale, basket, tokens)
+    P--&gt;&gt;S: product carousel + chips
+</pre><figcaption>Click to zoom</figcaption></figure>
+<table>
+<thead>
+<tr>
+<th>Shopper starts with…</th>
+<th>…then says</th>
+<th>Routed to</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Order status or tracking (Order Support)</td>
+<td>"Show me <category>", "Do you have this in <size>?"</td>
+<td><code>product_expert</code></td>
+</tr>
+<tr>
+<td>A return‑eligibility answer (Order Support)</td>
+<td>"I need a different size of <MODEL>"</td>
+<td><code>product_expert</code> (product‑specific sizing belongs to commerce)</td>
+</tr>
+<tr>
+<td>Return policy (Site FAQ)</td>
+<td>"What <category> do you have for <occasion>?"</td>
+<td><code>product_expert</code></td>
+</tr>
+<tr>
+<td>Size chart (Site FAQ)</td>
+<td>"Then show me kids' <MODEL> in <size>"</td>
+<td><code>product_expert</code></td>
+</tr>
+<tr>
+<td>Loyalty program (Site FAQ)</td>
+<td>"Any <franchise> accessories?"</td>
+<td><code>product_expert</code></td>
+</tr>
+<tr>
+<td>An FAQ answer mentions a line name</td>
+<td>"Do you have <LINE_NAME>?"</td>
+<td><code>off_topic</code> → catalog hit → <code>product_expert</code></td>
+</tr>
+</tbody>
+</table>
+<h3 id="63-commerce-service">6.3 Commerce → service</h3>
+<figure class="diagram" title="Click to zoom"><pre class="mermaid">sequenceDiagram
+    actor S as Shopper
+    participant R as Main agent_router
+    participant P as product_expert (main)
+    participant F as Site FAQ (connected)
+    participant O as Order Support (connected)
+
+    S-&gt;&gt;R: &quot;Show me lined clogs for winter&quot;
+    R-&gt;&gt;P: product discovery
+    P--&gt;&gt;S: product carousel
+    S-&gt;&gt;R: &quot;What&#x27;s your return policy if they don&#x27;t fit?&quot;
+    R-&gt;&gt;F: policy question (FAQ beats discovery even if a product is named)
+    F--&gt;&gt;S: returns policy + links (passed through)
+    S-&gt;&gt;R: &quot;Actually, where&#x27;s my last order? &lt;ORDER_NO&gt;&quot;
+    R-&gt;&gt;R: capture OrderNumber (email blank)
+    R-&gt;&gt;O: hand-off (OrderNumber, routableId, siteIdentifier)
+    O--&gt;&gt;S: asks only for the missing email
+    S-&gt;&gt;R: &quot;me@example.com&quot;
+    R-&gt;&gt;O: email alone while a lookup is in progress → Order Support
+    O--&gt;&gt;S: order card
+    S-&gt;&gt;R: &quot;Thanks — back to those clogs, size 8&quot;
+    R-&gt;&gt;P: product discovery (commerce session intact)
+</pre><figcaption>Click to zoom</figcaption></figure>
+<p>Hand‑off rules that make these paths reliable:</p>
+<ul>
+<li><strong>Policy beats discovery.</strong> A policy question goes to FAQ even when it names a product. Sizing of a
+  <em>specific</em> product stays in <code>product_expert</code>.</li>
+<li><strong>Returns process vs. order eligibility.</strong><ul>
+<li>"I want to return my order" with no order number goes to <strong>Site FAQ</strong>, which explains how to start
+a return.</li>
+<li>"Is order <ORDER_NO> eligible for return?" goes to <strong>Order Support</strong>.</li>
+</ul>
+</li>
+<li><strong>Cancel or change.</strong> The general process goes to FAQ. Cancelling or changing a specific named order
+  goes to Order Support. It never goes to <code>product_expert</code>, even if a product is named.</li>
+<li><strong>Tracking how‑to → lookup bridge.</strong> FAQ may explain how to track an order. If the shopper then says
+  "yes, look it up", the main router sends the turn to Order Support, which collects the order number
+  and email.</li>
+<li><strong>Follow‑ups stick.</strong> "Check another order", a bare order number, or an email alone during an
+  active lookup all route back to Order Support.</li>
+<li><strong>Clean exit.</strong> "I don't have my order number" goes to FAQ for tracking guidance and does not loop
+  back into the lookup.</li>
+</ul>
+<h3 id="64-service-or-commerce-human">6.4 Service or commerce → human</h3>
+<ul>
+<li><strong>The shopper asks for a human.</strong> The flow is <code>Escalation</code> → <code>deflection</code> (first request) →
+  <code>information_collection</code> (first name, last name, email) → <code>process_escalation</code> (business hours,
+  agent availability, Person Account and Case creation) → Omni‑Channel flow.</li>
+<li><strong>Order lookups keep failing.</strong> After N distinct failures, Order Support sets <code>Can_Escalate__c</code> and
+  offers a transfer. If the shopper accepts, the main router reads <code>CanEscalate = true</code> and skips
+  deflection.</li>
+<li>The order number recorded by Order Support is already on the session, so the human agent and the
+  case have it.</li>
+</ul>
+<hr />
+<h2 id="7-connected-agent-internals-summary">7. Connected agent internals (summary)</h2>
+<h3 id="order-support-agentorder_support_agent">Order Support (<code>agent://&lt;Order_Support_Agent&gt;</code>)</h3>
+<ul>
+<li><strong>Template:</strong> <code>SvcCopilotTmpl__AgentforceServiceAgent</code>. <strong>Router:</strong> Hyper Classifier. Its
+  destinations are <code>Order_Management</code>, <code>off_topic</code>, and <code>ambiguous_question</code>.</li>
+<li><strong>Order_Management actions:</strong><ul>
+<li>Resolve order (Apex): validates the order and email and performs the order‑status lookup.</li>
+<li>Order‑number help (Apex): returns the "where do I find my order number" card.</li>
+<li>Order FAQ prompt template with knowledge.</li>
+<li>Record session order number (async Apex).</li>
+<li>Set‑can‑escalate (flow).</li>
+</ul>
+</li>
+<li><strong>Behaviours:</strong><ul>
+<li>It reuses already‑validated values within the session.</li>
+<li>It does not count repeated failures on the same order number twice.</li>
+<li>It ignores invalid formats from other brands or regions when counting failures.</li>
+<li>It never shares order details if the email doesn't match the order.</li>
+</ul>
+</li>
+<li><code>escalation_offer</code> only <em>asks</em> whether the shopper wants a live agent. The main agent performs the
+  transfer.</li>
+</ul>
+<h3 id="site-faq-agentsite_faq_agent">Site FAQ (<code>agent://&lt;Site_FAQ_Agent&gt;</code>)</h3>
+<ul>
+<li><strong>Router:</strong> Hyper Classifier. It always produces a transition and never answers directly. It
+  applies rules in order: decline → coupons → store locator → sizing → loyalty → general FAQ (the
+  default).</li>
+<li>Answers come <strong>only from prompt templates</strong> grounded in knowledge. The agent adds no facts or URLs
+  of its own.</li>
+<li>The scope rule in its system instructions says product discovery, product detail, and order lookup
+  belong to the parent shopper agent. The main router takes those turns.</li>
+<li>Citations are enabled. Links are passed through and must be preserved by the main agent.</li>
+</ul>
+<hr />
+<h2 id="8-implementation-checklist-and-recommendations">8. Implementation checklist and recommendations</h2>
+<table>
+<thead>
+<tr>
+<th>#</th>
+<th>Item</th>
+<th>Why</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>1</td>
+<td>Map <strong>every</strong> External input a connected agent expects, including <code>Locale</code> or language (for example <code>Locale: string = @variables.DetectedLanguage</code>). Branch on that input inside the connected agent instead of on linked session variables.</td>
+<td>Linked variables are null inside connected agents. Without the mapping, locale‑specific content such as a localized FAQ page silently falls back to the default.</td>
+</tr>
+<tr>
+<td>2</td>
+<td>Always pass the session ID as an input (<code>routableId</code>). Do not rely on the connected agent's own linked <code>RoutableId</code>.</td>
+<td>It is the only way the connected agent can write back to the session.</td>
+</tr>
+<tr>
+<td>3</td>
+<td>Use <strong>MessagingSession fields plus a read flow in the main router</strong> as the back‑channel from connected agents (for example <code>Can_Escalate__c</code>).</td>
+<td>Connected agents have no output mapping.</td>
+</tr>
+<tr>
+<td>4</td>
+<td>Keep <strong>human transfer only in the main agent</strong>. Connected agents should <em>offer</em> it and set a flag.</td>
+<td>This gives one escalation path, one case‑creation flow, and consistent queue routing.</td>
+</tr>
+<tr>
+<td>5</td>
+<td>Add a top‑priority <strong>verbatim passthrough rule</strong> for structured payloads returned by connected agents.</td>
+<td>Paraphrasing silently breaks rich cards.</td>
+</tr>
+<tr>
+<td>6</td>
+<td>Run the "capture before hand‑off" step for lookup keys in the router.</td>
+<td>The shopper never has to repeat details they have already given.</td>
+</tr>
+<tr>
+<td>7</td>
+<td>Consider passing light <strong>product context</strong> (for example <code>CurrentProductName</code>) to the FAQ agent, or have the router replace pronouns with the product name before hand‑off.</td>
+<td>Product‑specific FAQs ("how do I clean these?") otherwise lose their subject.</td>
+</tr>
+<tr>
+<td>8</td>
+<td>Make the policy‑vs‑product and process‑vs‑specific‑order boundaries explicit in the router <strong>and</strong> in each subagent's description.</td>
+<td>These two boundaries account for most misroutes.</td>
+</tr>
+<tr>
+<td>9</td>
+<td>Keep each guidance string at or under 255 characters.</td>
+<td>Publish rejects longer strings, and validate does not catch it.</td>
+</tr>
+<tr>
+<td>10</td>
+<td>Only offer suggestion chips the agent can fulfil, and test every chip end‑to‑end.</td>
+<td>A chip that errors, resets the chat, or loops to the greeting breaks the shopper's trust.</td>
+</tr>
+</tbody>
+</table></main>
+</div>
+<div id="zoom"><div class="inner"></div></div>
+<script type="module">
+import mermaid from "https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs";
+mermaid.initialize({startOnLoad:false,theme:"default",flowchart:{htmlLabels:true,useMaxWidth:true},sequence:{useMaxWidth:true}});
+await mermaid.run();
+const zoom = document.getElementById("zoom"), inner = zoom.querySelector(".inner");
+document.querySelectorAll("figure.diagram").forEach(fig => fig.addEventListener("click", () => {
+  const svg = fig.querySelector("svg").cloneNode(true);
+  const vb = svg.viewBox.baseVal;
+  svg.removeAttribute("style");
+  svg.setAttribute("width", Math.max(vb.width * 1.4, Math.min(window.innerWidth - 96, vb.width * 2)));
+  inner.replaceChildren(svg);
+  zoom.style.display = "block";
+}));
+zoom.addEventListener("click", () => { zoom.style.display = "none"; });
+document.addEventListener("keydown", e => { if (e.key === "Escape") zoom.style.display = "none"; });
+</script>
+</body>
+</html>
