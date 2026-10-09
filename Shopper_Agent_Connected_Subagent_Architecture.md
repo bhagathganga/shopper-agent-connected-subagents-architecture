@@ -4,9 +4,6 @@
 > discovery, run by a commerce subagent in the main agent, with order support and site FAQ, run by
 > separately deployed **connected agents**. It also covers live‑agent escalation, how context is
 > shared across agent boundaries, and how a shopper moves seamlessly between service and commerce.
->
-> The pattern is taken from a production‑style retail deployment and has been anonymised. Names in
-> `<ANGLE_BRACKETS>` are placeholders. Standard Salesforce action and node names are real.
 
 ---
 
@@ -464,15 +461,6 @@ bridge rules in Section 6.3 depend on this.
   In this pattern that state includes the last validated order and email, a distinct‑failure
   counter, and the last lookup result. The only exception is what is written to the session record
   (Channel 3).
-
-### 5.6 What is *not* shared
-
-| Not shared | Consequence |
-|---|---|
-| Commerce context (product IDs, carousel data, basket, shopper tokens) is not passed to connected agents | Connected agents cannot search or see the cart. A reference such as "how do I clean these?" can be resolved only if the product name appears as text within the last 10 messages (Channel 1). Pass a product name as an input if it must be reliable. |
-| Main‑agent escalation state | Connected agents never perform the transfer. Order Support only *offers* it, and the main agent owns the hand‑off. |
-| Connected‑agent variables → main‑agent variables | There is no output mapping. Only session‑record fields (Channel 3) and the reply text (Channel 4) flow back. |
-| Conversation older than the last 10 messages | It is not visible to the connected agent. Pass anything that must persist as an input. |
 
 ---
 

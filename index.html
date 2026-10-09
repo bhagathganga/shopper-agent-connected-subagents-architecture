@@ -57,7 +57,6 @@ figure.diagram figcaption{font-size:12px;color:#8a93a3;text-align:right;margin-t
 <li><a href="#53-channel-3-the-shared-messagingsession-record-connected-main-and-into-escalation">5.3 Channel 3: the shared MessagingSession record (connected → main, and into escalation)</a></li>
 <li><a href="#54-channel-4-the-response-path-connected-main-shopper">5.4 Channel 4: the response path (connected → main → shopper)</a></li>
 <li><a href="#55-channel-5-language-and-connectedagent-state">5.5 Channel 5: language and connected‑agent state</a></li>
-<li><a href="#56-what-is-not-shared">5.6 What is not shared</a></li>
 </ul>
 </li>
 <li><a href="#6-seamless-movement-between-service-and-commerce">6. Seamless movement between service and commerce</a><ul>
@@ -81,8 +80,6 @@ figure.diagram figcaption{font-size:12px;color:#8a93a3;text-align:right;margin-t
 discovery, run by a commerce subagent in the main agent, with order support and site FAQ, run by
 separately deployed <strong>connected agents</strong>. It also covers live‑agent escalation, how context is
 shared across agent boundaries, and how a shopper moves seamlessly between service and commerce.</p>
-<p>The pattern is taken from a production‑style retail deployment and has been anonymised. Names in
-<code>&lt;ANGLE_BRACKETS&gt;</code> are placeholders. Standard Salesforce action and node names are real.</p>
 </blockquote>
 <hr />
 <h2 id="1-overview">1. Overview</h2>
@@ -584,33 +581,6 @@ bridge rules in Section 6.3 depend on this.</p>
   counter, and the last lookup result. The only exception is what is written to the session record
   (Channel 3).</li>
 </ul>
-<h3 id="56-what-is-not-shared">5.6 What is <em>not</em> shared</h3>
-<table>
-<thead>
-<tr>
-<th>Not shared</th>
-<th>Consequence</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td>Commerce context (product IDs, carousel data, basket, shopper tokens) is not passed to connected agents</td>
-<td>Connected agents cannot search or see the cart. A reference such as "how do I clean these?" can be resolved only if the product name appears as text within the last 10 messages (Channel 1). Pass a product name as an input if it must be reliable.</td>
-</tr>
-<tr>
-<td>Main‑agent escalation state</td>
-<td>Connected agents never perform the transfer. Order Support only <em>offers</em> it, and the main agent owns the hand‑off.</td>
-</tr>
-<tr>
-<td>Connected‑agent variables → main‑agent variables</td>
-<td>There is no output mapping. Only session‑record fields (Channel 3) and the reply text (Channel 4) flow back.</td>
-</tr>
-<tr>
-<td>Conversation older than the last 10 messages</td>
-<td>It is not visible to the connected agent. Pass anything that must persist as an input.</td>
-</tr>
-</tbody>
-</table>
 <hr />
 <h2 id="6-seamless-movement-between-service-and-commerce">6. Seamless movement between service and commerce</h2>
 <h3 id="61-why-switching-works">6.1 Why switching works</h3>
